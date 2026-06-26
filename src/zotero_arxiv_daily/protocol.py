@@ -64,9 +64,6 @@ class Paper:
         prompt = enc.decode(prompt_tokens)
 
         generation_kwargs = dict(llm_params.get('generation_kwargs', {}))
-        if _is_chinese(lang):
-            # Lower temperature makes the model more deterministic and more likely to follow the language instruction.
-            generation_kwargs.setdefault("temperature", 0.2)
 
         response = openai_client.chat.completions.create(
             messages=[
