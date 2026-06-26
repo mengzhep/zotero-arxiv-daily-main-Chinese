@@ -31,8 +31,14 @@ class Paper:
     def _generate_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict) -> str:
         lang = llm_params.get('language', 'English')
         if _is_chinese(lang):
-            instruction = f"根据以下论文信息，用中文生成一句话的 TLDR 摘要。摘要本身请用中文输出，不要出现英文："
-            system_prompt = f"你是一位擅长总结学术论文的助手。请用中文输出摘要，不要混合英文。"
+            instruction = (
+                "请阅读以下论文信息，并用流利、地道的中文写一句话摘要。"
+                "要求：只输出中文摘要，不要包含任何英文单词，不要翻译标题，不要复述原文句子。"
+            )
+            system_prompt = (
+                "你是学术摘要助手。你的回答必须全部使用中文，不得包含英文。"
+                "直接输出摘要，不要加前缀、解释或额外内容。"
+            )
         else:
             instruction = f"Given the following information of a paper, generate a one-sentence TLDR summary in {lang}:\n\n"
             system_prompt = f"You are an assistant who perfectly summarizes scientific paper, and gives the core idea of the paper to the user. Your answer should be in {lang}."
@@ -57,6 +63,11 @@ class Paper:
         prompt_tokens = prompt_tokens[:4000]  # truncate to 4000 tokens
         prompt = enc.decode(prompt_tokens)
 
+        generation_kwargs = dict(llm_params.get('generation_kwargs', {}))
+        if _is_chinese(lang):
+            # Lower temperature makes the model more deterministic and more likely to follow the language instruction.
+            generation_kwargs.setdefault("temperature", 0.2)
+
         response = openai_client.chat.completions.create(
             messages=[
                 {
@@ -65,7 +76,7 @@ class Paper:
                 },
                 {"role": "user", "content": prompt},
             ],
-            **llm_params.get('generation_kwargs', {})
+            **generation_kwargs
         )
         tldr = response.choices[0].message.content
         return tldr
