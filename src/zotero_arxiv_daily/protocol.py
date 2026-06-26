@@ -31,8 +31,8 @@ class Paper:
     def _generate_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict) -> str:
         lang = llm_params.get('language', 'English')
         if _is_chinese(lang):
-            instruction = f"根据以下论文信息，用{lang}生成一句话的 TLDR 摘要："
-            system_prompt = f"你是一位擅长总结学术论文的助手，能够用{lang}准确提炼论文的核心思想。"
+            instruction = f"根据以下论文信息，用中文生成一句话的 TLDR 摘要。摘要本身请用中文输出，不要出现英文："
+            system_prompt = f"你是一位擅长总结学术论文的助手。请用中文输出摘要，不要混合英文。"
         else:
             instruction = f"Given the following information of a paper, generate a one-sentence TLDR summary in {lang}:\n\n"
             system_prompt = f"You are an assistant who perfectly summarizes scientific paper, and gives the core idea of the paper to the user. Your answer should be in {lang}."
