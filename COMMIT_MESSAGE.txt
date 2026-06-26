@@ -1,0 +1,8 @@
+feat: add Chinese language support for email content
+
+- Make email templates (labels, empty-state message, unsubscribe footer) switchable by language.
+- Pass the configured llm.language from executor to render_email.
+- Localize LLM prompts for TLDR and affiliation extraction when language is Chinese.
+- Set custom.yaml default llm.language to Chinese.
+- Update base.yaml language comment to mention Chinese support.
+- Add CHINESE_USAGE.md with deployment and local run instructions.
