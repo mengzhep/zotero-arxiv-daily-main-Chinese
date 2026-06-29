@@ -1,7 +1,7 @@
 zotero:
   user_id: ${oc.env:ZOTERO_ID}
   api_key: ${oc.env:ZOTERO_KEY}
-  include_path: null # Or set a list of glob patterns, e.g. ["2026/survey/**","2026/reading-group/**"]
+  include_path: ["研究生/**"] # 只读取 Zotero 中"研究生"目录及其子目录下的论文
 
 email:
   sender: ${oc.env:SENDER}
@@ -9,19 +9,30 @@ email:
   smtp_server: smtp.qq.com
   smtp_port: 465
   sender_password: ${oc.env:SENDER_PASSWORD}
+  show_tips: true # 是否显示每篇论文的 AI 学习小 tip
 
 llm:
   api:
     key: ${oc.env:OPENAI_API_KEY}
     base_url: ${oc.env:OPENAI_API_BASE}
-  language: Chinese
+  language: Chinese # 启用中文邮件和中文 TLDR
   generation_kwargs:
+    max_tokens: 16384
     model: gpt-4o-mini
 
 source:
   arxiv:
-    category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
+    category: [
+      "quant-ph",       # 量子物理 (涵盖 QKD, TF-QKD, MPQKD, 量子光学)
+      "astro-ph.IM",    # 天体物理仪器与方法
+      "physics.optics", # 光学
+      "physics.ins-det" # 仪器与探测器
+    ]
+    include_cross_list: false
 
 executor:
   debug: ${oc.env:DEBUG,null}
+  send_empty: false
+  max_paper_num: 100
   source: ['arxiv']
+  reranker: local

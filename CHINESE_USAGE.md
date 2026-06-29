@@ -1,6 +1,6 @@
 # 中文邮件使用说明
 
-本项目 fork 自 [TideDra/zotero-arxiv-daily](https://github.com/TideDra/zotero-arxiv-daily)，并已加入**中文邮件支持**。
+本项目 fork 自 [TideDra/zotero-arxiv-daily](https://github.com/TideDra/zotero-arxiv-daily)，并已加入**中文邮件支持**和**AI 学习小 tip 功能**。
 
 ## 快速开始
 
@@ -20,7 +20,7 @@
 | `SENDER_PASSWORD` | SMTP 授权码（不是邮箱登录密码） |
 | `RECEIVER` | 收件邮箱 |
 | `OPENAI_API_KEY` | LLM API Key |
-| `OPENAI_API_BASE` | LLM API 地址，例如 `https://api.siliconflow.cn/v1` |
+| `OPENAI_API_BASE` | LLM API 地址，例如 `https://api.moonshot.cn/v1` |
 
 ### 3. 配置 CUSTOM_CONFIG 变量
 
@@ -30,7 +30,7 @@
 zotero:
   user_id: ${oc.env:ZOTERO_ID}
   api_key: ${oc.env:ZOTERO_KEY}
-  include_path: null
+  include_path: ["研究生/**"] # 只读取 Zotero 中"研究生"目录及其子目录下的论文
 
 email:
   sender: ${oc.env:SENDER}
@@ -38,6 +38,7 @@ email:
   smtp_server: smtp.qq.com
   smtp_port: 465
   sender_password: ${oc.env:SENDER_PASSWORD}
+  show_tips: true # 是否显示每篇论文的 AI 学习小 tip
 
 llm:
   api:
@@ -45,17 +46,29 @@ llm:
     base_url: ${oc.env:OPENAI_API_BASE}
   language: Chinese   # 启用中文邮件和中文 TLDR
   generation_kwargs:
-    model: gpt-4o-mini
+    max_tokens: 16384
+    model: kimi-for-coding
 
 source:
   arxiv:
-    category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
+    category: [
+      "quant-ph",       # 量子物理
+      "astro-ph.IM",    # 天体物理仪器与方法
+      "physics.optics", # 光学
+      "physics.ins-det" # 仪器与探测器
+    ]
+    include_cross_list: false
 
 executor:
+  debug: ${oc.env:DEBUG,null}
+  send_empty: false
+  max_paper_num: 100
   source: ['arxiv']
+  reranker: local
 ```
 
 如需恢复英文，将 `language` 改为 `English` 或直接删除这一行。
+如需关闭 AI 学习小 tip，将 `email.show_tips` 改为 `false`。
 
 ### 4. 手动测试
 
@@ -64,6 +77,14 @@ executor:
 ### 5. 等待每日自动推送
 
 主工作流默认每天 UTC 22:00 运行，会自动抓取前一天的新论文并发送中文推荐邮件。
+
+## AI 学习小 tip
+
+当 `email.show_tips: true` 时，每篇论文下方会多出一块黄色提示区，包含三部分：
+
+1. **核心概念**：一句话解释论文中最重要的专业术语。
+2. **推荐原因**：解释这篇论文为什么被推荐，与你的 Zotero 研究方向有何关联。
+3. **研究价值小抄**：2-4 条关键信息，帮助你快速判断是否要精读全文。
 
 ## 本地运行
 
@@ -84,7 +105,7 @@ export SENDER=你的发件邮箱
 export SENDER_PASSWORD=你的SMTP授权码
 export RECEIVER=你的收件邮箱
 export OPENAI_API_KEY=你的APIKey
-export OPENAI_API_BASE=https://api.siliconflow.cn/v1
+export OPENAI_API_BASE=https://api.moonshot.cn/v1
 
 # 4. 运行
 uv run src/zotero_arxiv_daily/main.py
@@ -96,6 +117,9 @@ uv run src/zotero_arxiv_daily/main.py
 
 - **相关度：** 7.5
 - **摘要：** LLM 生成的一句话中文摘要
+- **核心概念：** 关键术语解释
+- **推荐原因：** 与你研究方向的关联
+- **研究价值小抄：** 关键要点列表
 - **PDF** 按钮
 - 无新论文时：**今日没有新论文，休息一下！**
 - 底部：**如需退订，请在 GitHub Action 设置中移除您的邮箱。**
@@ -103,7 +127,7 @@ uv run src/zotero_arxiv_daily/main.py
 ## 常见问题
 
 1. **LLM 没有返回中文**  
-   确认 `language: Chinese` 已正确添加在 `llm` 下，且使用的模型支持中文（如 `gpt-4o-mini`）。
+   确认 `language: Chinese` 已正确添加在 `llm` 下，且使用的模型支持中文（如 `kimi-for-coding`）。
 
 2. **邮件显示乱码**  
    主流邮箱（QQ、Outlook、Gmail）均支持 UTF-8。如遇乱码，请检查 SMTP 服务器设置。
@@ -111,5 +135,8 @@ uv run src/zotero_arxiv_daily/main.py
 3. **如何切换回英文**  
    把 `custom.yaml` 中的 `language: Chinese` 改为 `language: English`。
 
-4. **同步上游更新**  
-   原仓库更新时，可以在 GitHub 页面点击 Sync fork。注意 `config/custom.yaml` 可能会被覆盖，需要重新设置 `language: Chinese`。
+4. **AI 小 tip 生成失败**  
+   小 tip 功能依赖 LLM 返回合法 JSON。如果模型不支持 `response_format: json_object`，可能会跳过。可以在日志中搜索 `[TIPS]` 查看错误。
+
+5. **同步上游更新**  
+   原仓库更新时，可以在 GitHub 页面点击 Sync fork。注意 `config/custom.yaml` 可能会被覆盖，需要重新设置 `language: Chinese` 和 `show_tips`。

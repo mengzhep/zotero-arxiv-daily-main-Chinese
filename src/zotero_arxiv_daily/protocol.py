@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, TypeVar
 from datetime import datetime
 import re
@@ -27,9 +27,85 @@ class Paper:
     tldr: Optional[str] = None
     affiliations: Optional[list[str]] = None
     score: Optional[float] = None
+    tips: dict = field(default_factory=dict)
+
+    def _build_tips_prompt(self, lang: str) -> tuple[str, str]:
+        if _is_chinese(lang):
+            system_prompt = (
+                "你是学术阅读助手。请用中文输出，不要包含英文。"
+                "针对每篇论文，分别生成三个模块：核心概念、推荐原因、研究价值小抄。"
+                "输出格式必须是严格的 JSON，包含三个字段：concept、relevance、cheatsheet。"
+                "- concept：一句话解释论文中最重要的一个专业术语。"
+                "- relevance：一句话解释这篇论文与用户 Zotero 中量子通信/量子光学/精密测量等研究方向的相关性。"
+                "- cheatsheet：一个包含 2-4 条关键信息的字符串数组（不要多于4条），每条简短、中文、无英文。"
+                "只输出 JSON，不要任何前言或后缀。"
+            )
+            instruction = (
+                "请根据以下论文信息，生成学习提示小 tip，以 JSON 格式返回。\n"
+                "要求：全部中文、无英文、JSON 格式。"
+            )
+        else:
+            system_prompt = (
+                "You are an academic reading assistant. For each paper, generate three modules: "
+                "core concept, relevance, and research value cheatsheet. "
+                "Output must be a strict JSON object with three fields: concept, relevance, cheatsheet. "
+                "- concept: one sentence explaining the most important technical term in the paper. "
+                "- relevance: one sentence explaining why this paper is relevant to the user's research interests. "
+                "- cheatsheet: an array of 2-4 short strings summarizing key takeaways. "
+                "Return only JSON, no preamble or suffix."
+            )
+            instruction = (
+                "Based on the following paper information, generate learning tips in JSON format."
+            )
+        return system_prompt, instruction
+
+    def _generate_tips_with_llm(self, openai_client: OpenAI, llm_params: dict) -> dict:
+        lang = llm_params.get('language', 'English')
+        system_prompt, instruction = self._build_tips_prompt(lang)
+
+        prompt = instruction + "\n\n"
+        if self.title:
+            prompt += f"Title:\n{self.title}\n\n"
+        if self.abstract:
+            prompt += f"Abstract:\n{self.abstract}\n\n"
+        if self.tldr:
+            prompt += f"TLDR:\n{self.tldr}\n\n"
+        if self.full_text:
+            prompt += f"Preview of main content:\n{self.full_text[:3000]}\n\n"
+
+        enc = tiktoken.encoding_for_model("gpt-4o")
+        prompt_tokens = enc.encode(prompt)
+        prompt_tokens = prompt_tokens[:4000]
+        prompt = enc.decode(prompt_tokens)
+
+        generation_kwargs = dict(llm_params.get('generation_kwargs', {}))
+
+        response = openai_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            **generation_kwargs
+        )
+        content = response.choices[0].message.content
+        logger.info(f"[TIPS] generated for {self.url}: {content[:200]}...")
+        return json.loads(content)
+
+    def generate_tips(self, openai_client: OpenAI, llm_params: dict) -> dict:
+        try:
+            tips = self._generate_tips_with_llm(openai_client, llm_params)
+            self.tips = tips
+            return tips
+        except Exception as e:
+            logger.warning(f"Failed to generate tips of {self.url}: {e}")
+            self.tips = {}
+            return {}
 
     def _generate_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict) -> str:
         lang = llm_params.get('language', 'English')
+        logger.info(f"[TLDR] detected language config: {lang!r}, is_chinese={_is_chinese(lang)}")
+
         if _is_chinese(lang):
             instruction = (
                 "请阅读以下论文信息，并用流利、地道的中文写一句话摘要。"
@@ -64,9 +140,8 @@ class Paper:
         prompt = enc.decode(prompt_tokens)
 
         generation_kwargs = dict(llm_params.get('generation_kwargs', {}))
-        if _is_chinese(lang):
-            # Lower temperature makes the model more deterministic and more likely to follow the language instruction.
-            generation_kwargs.setdefault("temperature", 0.2)
+
+        logger.info(f"[TLDR] system prompt language: {'Chinese' if _is_chinese(lang) else 'English'}")
 
         response = openai_client.chat.completions.create(
             messages=[
@@ -79,6 +154,7 @@ class Paper:
             **generation_kwargs
         )
         tldr = response.choices[0].message.content
+        logger.info(f"[TLDR] generated ({'Chinese' if _is_chinese(lang) else 'English'} mode): {tldr[:100]}...")
         return tldr
 
     def generate_tldr(self, openai_client: OpenAI, llm_params: dict) -> str:

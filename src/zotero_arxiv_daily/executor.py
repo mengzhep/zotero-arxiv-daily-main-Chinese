@@ -111,14 +111,16 @@ class Executor:
             logger.info("Reranking papers...")
             reranked_papers = self.reranker.rerank(all_papers, corpus)
             reranked_papers = reranked_papers[:self.config.executor.max_paper_num]
-            logger.info("Generating TLDR and affiliations...")
+            logger.info("Generating TLDR, affiliations, and learning tips...")
             for p in tqdm(reranked_papers):
                 p.generate_tldr(self.openai_client, self.config.llm)
                 p.generate_affiliations(self.openai_client, self.config.llm)
+                if self.config.email.get("show_tips", True):
+                    p.generate_tips(self.openai_client, self.config.llm)
         elif not self.config.executor.send_empty:
             logger.info("No new papers found. No email will be sent.")
             return
         logger.info("Sending email...")
-        email_content = render_email(reranked_papers, self.config.llm.get("language", "English"))
+        email_content = render_email(reranked_papers, self.config.llm.get("language", "English"), self.config.email.get("show_tips", True))
         send_email(self.config, email_content)
         logger.info("Email sent successfully")
